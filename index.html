@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>大会情報 かんたん抽出</title>
+<style>
+  :root { --line:#e5e3da; --ink:#2c2c2a; --sub:#5f5e5a; --box:#faf9f5;
+          --req:#a32d2d; --req-bg:#fcebeb;
+          --accent:#1d9e75; --accent-bg:#e1f5ee; --note-text:#0f6e56;
+          --tennis:#185fa5; --tennis-bg:#e6f1fb; --pickle:#1d9e75; --pickle-bg:#e1f5ee; }
+  * { box-sizing: border-box; }
+  body { font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+         color: var(--ink); line-height: 1.8; margin: 0; background: #fff; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 32px 20px 64px; }
+  [hidden] { display: none !important; }
+
+  /* 競技選択ビュー */
+  #view-select { max-width: 620px; margin: 0 auto; padding-top: 16px; }
+  #view-select h1 { font-size: 24px; font-weight: 600; margin: 0 0 4px; text-align: center; }
+  #view-select .lead { color: var(--sub); font-size: 15px; margin: 0 0 32px; text-align: center; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .card { display: block; width: 100%; text-align: center; cursor: pointer; font: inherit; color: inherit;
+          border: 1px solid var(--line); border-radius: 14px; padding: 32px 16px; background: var(--box);
+          transition: transform .1s, border-color .1s, box-shadow .1s; }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,.06); }
+  .card .emoji { font-size: 48px; line-height: 1; }
+  .card .cname { font-size: 18px; font-weight: 600; margin: 12px 0 2px; }
+  .card .desc { font-size: 13px; color: var(--sub); margin: 0; }
+  .card.tennis:hover { border-color: var(--tennis); }
+  .card.tennis .cname { color: var(--tennis); }
+  .card.pickle:hover { border-color: var(--pickle); }
+  .card.pickle .cname { color: var(--pickle); }
+
+  /* プロンプト作成ビュー */
+  .back { font-size: 14px; color: var(--sub); text-decoration: none; background: none; border: none;
+          cursor: pointer; font-family: inherit; padding: 0; }
+  .back:hover { color: var(--accent); }
+  h1 { font-size: 22px; font-weight: 600; margin: 8px 0 4px; }
+  .lead { color: var(--sub); font-size: 15px; margin: 0 0 24px; }
+  h2 { font-size: 17px; font-weight: 600; margin: 32px 0 12px; padding-bottom: 6px;
+       border-bottom: 1px solid var(--line); }
+  ol.steps { padding-left: 0; list-style: none; counter-reset: s; margin: 0; }
+  ol.steps li { counter-increment: s; position: relative; padding: 10px 0 10px 40px; font-size: 15px; }
+  ol.steps li::before { content: counter(s); position: absolute; left: 0; top: 8px;
+       width: 28px; height: 28px; border-radius: 50%; background: var(--accent-bg);
+       color: var(--accent); font-weight: 600; display: flex; align-items: center;
+       justify-content: center; font-size: 14px; }
+  .req-note { background: var(--req-bg); border: 1px solid #f0999a; border-radius: 10px;
+       padding: 14px 18px; font-size: 14px; color: var(--req); margin: 16px 0 8px; }
+  .field { margin: 18px 0; }
+  .field label { display: block; font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .req { display: inline-block; background: var(--req); color: #fff; font-size: 12px; font-weight: 600;
+       border-radius: 4px; padding: 1px 8px; margin-left: 8px; vertical-align: 2px; }
+  .field .hint { font-size: 13px; color: var(--sub); margin: 0 0 8px; }
+  .field input { width: 100%; font-size: 15px; padding: 12px 14px; border: 1px solid var(--line);
+       border-radius: 8px; background: #fff; color: var(--ink); }
+  .field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+  .promptbox { position: relative; margin: 12px 0 4px; }
+  textarea#prompt { width: 100%; height: 380px; resize: vertical; font-size: 13px; line-height: 1.7;
+       padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--box);
+       color: var(--ink); font-family: "SFMono-Regular", Consolas, "Courier New", monospace; }
+  .copybtn { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px;
+       background: var(--accent); color: #fff; border: none; border-radius: 8px;
+       padding: 12px 20px; font-size: 15px; font-weight: 600; cursor: pointer; }
+  .copybtn:active { transform: scale(0.98); }
+  .copied { color: var(--accent); font-size: 14px; margin-left: 12px; opacity: 0; transition: opacity .2s; }
+  .copied.show { opacity: 1; }
+  .warn { display: none; margin-top: 10px; background: var(--req-bg); border: 1px solid #f0999a;
+       border-radius: 8px; padding: 10px 14px; font-size: 14px; color: var(--req); }
+  .warn.show { display: block; }
+  .note { background: var(--accent-bg); border-radius: 10px; padding: 14px 18px; font-size: 14px;
+       color: var(--note-text); margin: 16px 0; }
+  .foot { margin-top: 40px; font-size: 13px; color: var(--sub); border-top: 1px solid var(--line); padding-top: 16px; }
+  @media (max-width: 440px) { .cards { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ① 競技選択ビュー -->
+  <div id="view-select">
+    <h1>大会情報 かんたん抽出</h1>
+    <p class="lead">まず競技を選んでください。</p>
+    <div class="cards">
+      <button type="button" class="card tennis" data-sport="tennis">
+        <div class="emoji">🎾</div>
+        <p class="cname">テニス</p>
+        <p class="desc">テニス大会の主催者はこちら</p>
+      </button>
+      <button type="button" class="card pickle" data-sport="pickle">
+        <div class="emoji">🥒</div>
+        <p class="cname">ピックルボール</p>
+        <p class="desc">ピックル大会の主催者はこちら</p>
+      </button>
+    </div>
+    <p class="foot" style="text-align:center;border:none">ご協力ありがとうございます。ご不明な点は担当者までお問い合わせください。</p>
+  </div>
+
+  <!-- ② プロンプト作成ビュー -->
+  <div id="view-prompt" hidden>
+    <p><button type="button" class="back" id="backBtn">← 競技の選択に戻る</button></p>
+    <h1 id="promptTitle"></h1>
+    <p class="lead">大会のチラシやお知らせから、掲載に必要な情報をAIに整理してもらうページです。パソコン・スマホどちらでもOK。</p>
+
+    <h2>使い方（5ステップ）</h2>
+    <ol class="steps">
+      <li>下の<strong>「主催ページURL」「大会情報ページURL」</strong>を入力します（どちらも必須）。</li>
+      <li><strong>「プロンプトをコピー」ボタン</strong>を押します（入力したURLが自動で組み込まれます）。</li>
+      <li>お使いのAI（<strong>ChatGPT</strong> や <strong>Claude</strong> など）を開いて貼り付け、続けて<strong>大会のチラシ画像・PDF・案内文</strong>（LINEやメールの文面でもOK）を一緒に送信します。</li>
+      <li>AIが決まった形式で結果を出力します。内容に<strong>間違いがないかご確認</strong>ください（違っていれば直接直してOK）。</li>
+      <li>その結果をコピーして、<strong>担当者までLINE / メールで送ってください</strong>。</li>
+    </ol>
+
+    <h2>① URLを入力（必須）</h2>
+    <div class="req-note">
+      ⚠ <strong>この2つのURLは必須です。</strong>チラシには載っていないことが多く、AIでは分からないため、主催者さまご自身での入力をお願いします。未入力だと大会を掲載できません。
+    </div>
+
+    <div class="field">
+      <label>主催ページURL <span class="req">必須</span></label>
+      <p class="hint">主催団体のトップページ。団体のインスタ / HP / Facebook のいずれか1つでOK。<br>例：https://instagram.com/あなたの団体</p>
+      <input type="url" id="orgUrl" inputmode="url" placeholder="https://instagram.com/あなたの団体">
+    </div>
+
+    <div class="field">
+      <label>大会情報ページURL <span class="req">必須</span></label>
+      <p class="hint">この大会の告知に直接飛べるURL。インスタの投稿ページ・チラシ画像のページなど。<br>例：https://instagram.com/p/xxxxxxxx</p>
+      <input type="url" id="infoUrl" inputmode="url" placeholder="https://...（この大会の告知ページ）">
+    </div>
+
+    <h2>② プロンプトをコピー</h2>
+    <div class="promptbox">
+      <textarea id="prompt" readonly></textarea>
+    </div>
+    <button class="copybtn" id="copybtn">📋 プロンプトをコピー</button>
+    <span class="copied" id="copied">コピーしました！</span>
+    <div class="warn" id="warn">⚠ 主催ページURL・大会情報ページURLが未入力です。必須項目のため、入力してからコピーすることをおすすめします（このままコピーもできます）。</div>
+
+    <div class="note">
+      ※ AIは内容を読み違えることがあります。<strong>日付・場所</strong>は特にご確認をお願いします。<br>
+      ※ 上記2つのURL以外で、記載が見当たらない項目は空欄のままで構いません。<br>
+      ※ <strong>備考に書かれた内容のすべてが掲載されるわけではありません。</strong>あらかじめご了承ください。
+    </div>
+
+    <div class="foot">
+      ご不明な点は担当者までお気軽にお問い合わせください。ご協力ありがとうございます。
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // 競技ごとの違いは「表示ラベル」と「配色」だけ。中身は共通。
+  var SPORTS = {
+    tennis: { label: "テニス",       emoji: "🎾", accent: "#185fa5", accentBg: "#e6f1fb", noteText: "#0c447c" },
+    pickle: { label: "ピックルボール", emoji: "🥒", accent: "#1d9e75", accentBg: "#e1f5ee", noteText: "#0f6e56" }
+  };
+
+  var current = null;
+  var selectView = document.getElementById('view-select');
+  var promptView = document.getElementById('view-prompt');
+  var orgEl = document.getElementById('orgUrl');
+  var infoEl = document.getElementById('infoUrl');
+  var promptEl = document.getElementById('prompt');
+  var warnEl = document.getElementById('warn');
+  var titleEl = document.getElementById('promptTitle');
+
+  function buildPrompt(label, info, org) {
+    return [
+      "あなたは" + label + "大会情報の抽出アシスタントです。",
+      "これから渡す大会の案内（チラシ画像・PDF・テキスト・LINEやメールの文面など）から情報を読み取り、",
+      "下記の【出力フォーマット】の形で、そのまま書き出してください。",
+      "",
+      "■ ルール",
+      "・各項目は「ラベル：値」の形で、1項目につき1行。ラベル名は変更しないこと。",
+      "・案内に情報が見当たらない項目は、値を空欄にする（行そのものは残す）。",
+      "・「大会情報ページURL」「主催ページURL」に既に値が入っている場合は、その値をそのまま残す（消したり変えたりしない）。",
+      "・URLは装飾せず、そのままの文字だけを書く（[ ] や ( ) で囲まない・Markdownのリンク形式にしない）。",
+      "・先頭の「競技：" + label + "」の行は、そのまま変更・削除しないこと。",
+      "・開催日は「西暦 YYYY/MM/DD」の形（例：2026/08/10）。「令和8年」「8月10日」などは西暦に直す。",
+      "・カテゴリは次から選ぶ：一般 / シニア / ジュニア / オープン（中学生以下向けは「ジュニア」、シニア向けは「シニア」、対象がはっきりしなければ「オープン」）。",
+      "・種目・レベル・性別が複数ある場合は「、」で区切る。",
+      "・種目は次から選ぶ：シングルス / ダブルス / ミックスダブルス / 団体戦 / 練習会 / 交流戦",
+      "・レベルは次から選ぶ：初心者 / 初中級 / 中級 / 上級 / オープン / 混合",
+      "・性別は次から選ぶ：男性 / 女性 / 混合 / 不問（「男女不問」は「不問」と書く）",
+      "・開催県は九州・沖縄（福岡 / 佐賀 / 長崎 / 熊本 / 大分 / 宮崎 / 鹿児島 / 沖縄）から。該当しなければ「その他」。",
+      "・説明や前置き・後書きは書かず、【出力フォーマット】だけを出力すること。",
+      "",
+      "■ 出力フォーマット",
+      "競技：" + label,
+      "大会名：",
+      "開催日：",
+      "カテゴリ：",
+      "主催者名：",
+      "開催県：",
+      "開催場所：",
+      "種目：",
+      "性別：",
+      "レベル：",
+      "主催ページURL：" + org,
+      "大会情報ページURL：" + info,
+      "備考："
+    ].join("\n");
+  }
+
+  function render() {
+    if (!current) return;
+    promptEl.value = buildPrompt(current.label, infoEl.value.trim(), orgEl.value.trim());
+  }
+
+  function selectSport(key) {
+    current = SPORTS[key];
+    var root = document.documentElement.style;
+    root.setProperty('--accent', current.accent);
+    root.setProperty('--accent-bg', current.accentBg);
+    root.setProperty('--note-text', current.noteText);
+    titleEl.textContent = current.emoji + " " + current.label + "大会情報 かんたん抽出";
+    warnEl.classList.remove('show');
+    render();
+    selectView.hidden = true;
+    promptView.hidden = false;
+    window.scrollTo(0, 0);
+  }
+
+  function backToSelect() {
+    promptView.hidden = true;
+    selectView.hidden = false;
+    window.scrollTo(0, 0);
+  }
+
+  var cardButtons = document.querySelectorAll('.card');
+  for (var i = 0; i < cardButtons.length; i++) {
+    cardButtons[i].addEventListener('click', function () {
+      selectSport(this.getAttribute('data-sport'));
+    });
+  }
+  document.getElementById('backBtn').addEventListener('click', backToSelect);
+  orgEl.addEventListener('input', render);
+  infoEl.addEventListener('input', render);
+
+  document.getElementById('copybtn').addEventListener('click', function () {
+    render();
+    var text = promptEl.value;
+    function done() {
+      var c = document.getElementById('copied');
+      c.classList.add('show');
+      setTimeout(function () { c.classList.remove('show'); }, 1800);
+    }
+    if (!orgEl.value.trim() || !infoEl.value.trim()) {
+      warnEl.classList.add('show');
+    } else {
+      warnEl.classList.remove('show');
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () {
+        promptEl.select(); document.execCommand('copy'); done();
+      });
+    } else {
+      promptEl.select(); document.execCommand('copy'); done();
+    }
+  });
+</script>
+</body>
+</html>
