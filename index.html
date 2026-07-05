@@ -157,10 +157,18 @@
 </div>
 
 <script>
-  // 競技ごとの違いは「表示ラベル」と「配色」だけ。中身は共通。
+  // 競技ごとの違い：表示ラベル・配色・カテゴリ選択肢・開催県の有無。
   var SPORTS = {
-    tennis: { label: "テニス",       emoji: "🎾", accent: "#185fa5", accentBg: "#e6f1fb", noteText: "#0c447c" },
-    pickle: { label: "ピックルボール", emoji: "🥒", accent: "#1d9e75", accentBg: "#e1f5ee", noteText: "#0f6e56" }
+    tennis: {
+      label: "テニス", emoji: "🎾", accent: "#185fa5", accentBg: "#e6f1fb", noteText: "#0c447c",
+      categoryRule: "・カテゴリは次から選ぶ：一般 / ジュニア（中学生・高校生など子ども向けは「ジュニア」、大人向けは「一般」）。",
+      prefecture: false
+    },
+    pickle: {
+      label: "ピックルボール", emoji: "🥒", accent: "#1d9e75", accentBg: "#e1f5ee", noteText: "#0f6e56",
+      categoryRule: "・カテゴリは次から選ぶ：一般 / シニア / ジュニア / オープン（中学生以下向けは「ジュニア」、シニア向けは「シニア」、対象がはっきりしなければ「オープン」）。",
+      prefecture: true
+    }
   };
 
   var current = null;
@@ -172,8 +180,9 @@
   var warnEl = document.getElementById('warn');
   var titleEl = document.getElementById('promptTitle');
 
-  function buildPrompt(label, info, org) {
-    return [
+  function buildPrompt(cfg, info, org) {
+    var label = cfg.label;
+    var lines = [
       "あなたは" + label + "大会情報の抽出アシスタントです。",
       "これから渡す大会の案内（チラシ画像・PDF・テキスト・LINEやメールの文面など）から情報を読み取り、",
       "下記の【出力フォーマット】の形で、そのまま書き出してください。",
@@ -185,34 +194,37 @@
       "・URLは装飾せず、そのままの文字だけを書く（[ ] や ( ) で囲まない・Markdownのリンク形式にしない）。",
       "・先頭の「競技：" + label + "」の行は、そのまま変更・削除しないこと。",
       "・開催日は「西暦 YYYY/MM/DD」の形（例：2026/08/10）。「令和8年」「8月10日」などは西暦に直す。",
-      "・カテゴリは次から選ぶ：一般 / シニア / ジュニア / オープン（中学生以下向けは「ジュニア」、シニア向けは「シニア」、対象がはっきりしなければ「オープン」）。",
+      cfg.categoryRule,
       "・種目・レベル・性別が複数ある場合は「、」で区切る。",
       "・種目は次から選ぶ：シングルス / ダブルス / ミックスダブルス / 団体戦 / 練習会 / 交流戦",
       "・レベルは次から選ぶ：初心者 / 初中級 / 中級 / 上級 / オープン / 混合",
-      "・性別は次から選ぶ：男性 / 女性 / 混合 / 不問（「男女不問」は「不問」と書く）",
-      "・開催県は九州・沖縄（福岡 / 佐賀 / 長崎 / 熊本 / 大分 / 宮崎 / 鹿児島 / 沖縄）から。該当しなければ「その他」。",
-      "・説明や前置き・後書きは書かず、【出力フォーマット】だけを出力すること。",
-      "",
-      "■ 出力フォーマット",
-      "競技：" + label,
-      "大会名：",
-      "開催日：",
-      "カテゴリ：",
-      "主催者名：",
-      "開催県：",
-      "開催場所：",
-      "種目：",
-      "性別：",
-      "レベル：",
-      "主催ページURL：" + org,
-      "大会情報ページURL：" + info,
-      "備考："
-    ].join("\n");
+      "・性別は次から選ぶ：男性 / 女性 / 混合 / 不問（「男女不問」は「不問」と書く）"
+    ];
+    if (cfg.prefecture) {
+      lines.push("・開催県は九州・沖縄（福岡 / 佐賀 / 長崎 / 熊本 / 大分 / 宮崎 / 鹿児島 / 沖縄）から。該当しなければ「その他」。");
+    }
+    lines.push("・説明や前置き・後書きは書かず、【出力フォーマット】だけを出力すること。");
+    lines.push("");
+    lines.push("■ 出力フォーマット");
+    lines.push("競技：" + label);
+    lines.push("大会名：");
+    lines.push("開催日：");
+    lines.push("カテゴリ：");
+    lines.push("主催者名：");
+    if (cfg.prefecture) { lines.push("開催県："); }
+    lines.push("開催場所：");
+    lines.push("種目：");
+    lines.push("性別：");
+    lines.push("レベル：");
+    lines.push("主催ページURL：" + org);
+    lines.push("大会情報ページURL：" + info);
+    lines.push("備考：");
+    return lines.join("\n");
   }
 
   function render() {
     if (!current) return;
-    promptEl.value = buildPrompt(current.label, infoEl.value.trim(), orgEl.value.trim());
+    promptEl.value = buildPrompt(current, infoEl.value.trim(), orgEl.value.trim());
   }
 
   function selectSport(key) {
